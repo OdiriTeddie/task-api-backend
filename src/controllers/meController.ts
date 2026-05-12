@@ -8,13 +8,14 @@ import prisma from "../../prismaClient.js";
 //   };
 // }
 
-export const getUser = async (req: Request, res: Response) => {
+export const getCurrentUser = async (req: Request, res: Response) => {
   const id = Number(req.user?.userId);
   const email = req.user?.email;
 
   try {
     const user = await prisma.user.findUnique({
-      where: { id: id, email: email },
+      where: { id: id },
+      select: { id: true, email: true, createdAt: true },
     });
 
     res.status(200).json(user);
