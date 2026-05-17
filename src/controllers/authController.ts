@@ -1,10 +1,5 @@
-import bcrypt from "bcrypt";
 import { Request, Response } from "express";
-import jwt from "jsonwebtoken";
-import prisma from "../../prismaClient.js";
-const JWT_SECRET = process.env.JWT_SECRET as string;
-
-const saltRounds = 10;
+import { loginUser, registerUser } from "../services/auth.service.js";
 
 // User Auth Endpoint
 
@@ -16,23 +11,13 @@ export const authRegister = async (req: Request, res: Response) => {
   }
 
   try {
-    const existingUser = await prisma.user.findUnique({
-      where: { email: email },
-    });
-
-    if (existingUser) {
-      return res.status(409).json({ message: "User Already Exist" });
-    }
-    const hashPassword = await bcrypt.hash(password, saltRounds);
-
-    await prisma.user.create({
-      data: {
-        email: email,
-        password: hashPassword,
-      },
-    });
+    await registerUser(email, password);
     res.status(201).json({ message: "User created!" });
   } catch (error) {
+    if (error instanceof Error && error.message === "User Already Exist") {
+      return res.status(409).json({ message: error.message });
+    }
+
     res.status(400).json({ error: "User already exists or database error" });
   }
 };
@@ -45,37 +30,18 @@ export const authLogin = async (req: Request, res: Response) => {
   }
 
   try {
-    const user = await prisma.user.findUnique({
-      where: { email: email },
-    });
-
-    if (!user) {
-      return res.status(401).json({ message: "Invalid Credentials" });
-    }
-
-    const isMatch = await bcrypt.compare(password, user.password);
-
-    if (!isMatch) {
-      return res.status(401).json({ message: "Invalid Credentials" });
-    }
-
-    const token = jwt.sign(
-      {
-        userId: user.id,
-        email: user.email,
-      },
-      JWT_SECRET,
-      {
-        expiresIn: "1h",
-      },
-    );
+    const { token, user } = await loginUser(email, password);
 
     res.json({
       message: "Login successful",
       token,
-      user: { id: user.id, email: user.email },
+      user,
     });
   } catch (error) {
+    if (error instanceof Error && error.message === "Invalid Credentials") {
+      return res.status(401).json({ message: error.message });
+    }
+
     res.status(500).json({ error: "Internal server error" });
   }
 };
