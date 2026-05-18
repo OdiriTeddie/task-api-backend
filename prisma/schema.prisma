@@ -7,20 +7,46 @@ datasource db {
 }
 
 model Task {
-  id        Int      @id @default(autoincrement())
-  userId    Int 
-  title     String
-  completed Boolean  @default(false)
-  createdAt DateTime @default(now())
-  user      User    @relation(fields: [userId], references: [id])     
+  id            Int      @id @default(autoincrement())
+  userId        Int 
+  title         String
+  completed     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user          User    @relation(fields: [userId], references: [id])     
+  transfers     TaskTransfer[]
 }
 
 
 model User {
-  id        Int    @id @default(autoincrement())
-  email     String  @unique
-  password  String  
-  createdAt DateTime @default(now())
+  id            Int    @id @default(autoincrement())
+  email         String  @unique
+  password      String  
+  createdAt     DateTime @default(now())
 
   tasks     Task[]
+}
+
+model TaskTransfer {
+  id              Int  @id @default(autoincrement())
+  taskId          Int
+  fromUserId      Int
+  toUserId        Int
+  status          String    @default("completed")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  task          Task        @relation(fields: [taskId], references: [id])
+}
+
+
+model AuditLog {
+  id                Int       @id     @default(autoincrement())
+  actorUserId       Int
+  action            String
+  entityType        String
+  entityId          Int
+  metadata          Json
+  createdAt         DateTime     @default(now())
 }
