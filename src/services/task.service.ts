@@ -79,3 +79,75 @@ export const deleteOwnedTask = async (taskId: number, userId: number) => {
 
   return task;
 };
+
+export const transferTrask = async ({
+  taskId,
+  currentUserId,
+  recipientEmail,
+}: {
+  taskId: number;
+  currentUserId: number;
+  recipientEmail: string;
+}) => {
+  return await prisma.$transaction(async (tx) => {
+    const task = await tx.task.findUnique({
+      where: {
+        id: taskId,
+      },
+    });
+
+    if (!task) {
+      throw new Error("Task not found");
+    }
+
+    if (task.userId !== currentUserId) {
+      throw new Error("You can only transfer your own task");
+    }
+
+    const recipient = await tx.user.findUnique({
+      where: {
+        email: recipientEmail,
+      },
+    });
+
+    if (!recipient) {
+      throw new Error("Recipient user not found");
+    }
+
+    if (recipient.id === currentUserId) {
+      throw new Error("You cannot transfer a task to yourself");
+    }
+
+    const updatedTask = await tx.task.update({
+      where: { id: taskId },
+      data: {
+        userId: recipient.id,
+      },
+    });
+
+    const transfer = await tx.taskTransfer.create({
+      data: {
+        taskId,
+        fromUserId: currentUserId,
+        toUserId: recipient.id,
+        status: "completed",
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        actorUserId: currentUserId,
+        action: "TRANSFER TASK",
+        entityType: "Task",
+        entityId: taskId,
+        metadata: {
+          transferId: transfer.id,
+          fromUserId: currentUserId,
+          toUserId: recipient.id,
+        },
+      },
+    });
+
+    return updatedTask;
+  });
+};
