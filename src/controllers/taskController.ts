@@ -92,11 +92,43 @@ export const transferTask = async (req: Request, res: Response) => {
 
 export const tasksStats = async (req: Request, res: Response) => {
   const userId = "1234";
-  await reportQueue.add("generate-report", {
+  const job = await reportQueue.add("generate-report", {
     userId,
   });
 
   return res.status(202).json({
     message: "Report generation started",
+    jobId: job.id,
+    statusUrl: `/tasks/stats/${job.id}`,
+  });
+};
+
+export const getTaskStatsStatus = async (req: Request, res: Response) => {
+  const { jobId } = req.params;
+
+  if (typeof jobId !== "string") {
+    return res.status(400).json({
+      error: "Invalid report job id",
+    });
+  }
+
+  const job = await reportQueue.getJob(jobId);
+
+  if (!job) {
+    return res.status(404).json({
+      error: "Report job not found",
+    });
+  }
+
+  const state = await job.getState();
+
+  return res.json({
+    jobId: job.id,
+    name: job.name,
+    state,
+    progress: job.progress,
+    data: job.data,
+    failedReason: job.failedReason,
+    returnvalue: job.returnvalue,
   });
 };
