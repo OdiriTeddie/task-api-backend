@@ -81,9 +81,12 @@ Create a `.env` file in the project root:
 ```env
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/task_app"
 JWT_SECRET="replace-with-a-long-random-secret"
+REDIS_HOST="localhost"
+REDIS_PORT="6379"
 ```
 
 `DATABASE_URL` is consumed by both Prisma configuration and the runtime Prisma client. `JWT_SECRET` is required for signing and verifying access tokens.
+`REDIS_HOST` and `REDIS_PORT` configure the BullMQ queue and worker. They default to `localhost` and `6379` if omitted.
 
 ## Getting Started
 
@@ -128,6 +131,36 @@ The API listens on:
 ```text
 http://localhost:3000
 ```
+
+### 6. Start Redis and the BullMQ worker
+
+BullMQ needs Redis running before jobs can be queued or processed. This project expects Redis at `localhost:6379` by default.
+
+If Redis is already installed and running locally, no extra command is needed. On Windows with Docker available, one common local option is:
+
+```bash
+docker run --name task-app-redis -p 6379:6379 -d redis:7-alpine
+```
+
+Run the worker in a separate terminal from the API:
+
+```bash
+npm run dev:worker
+```
+
+The report job is queued by:
+
+```http
+GET /tasks/stats
+```
+
+Expected flow:
+
+1. Redis is listening on `localhost:6379`.
+2. The API runs with `npm run dev`.
+3. The worker runs with `npm run dev:worker`.
+4. Requesting `GET http://localhost:3000/tasks/stats` returns `202`.
+5. The worker terminal logs the report generation messages and job completion.
 
 ## Authentication Flow
 
@@ -260,7 +293,9 @@ The API returns explicit error responses for cases such as:
 | Command | Purpose |
 | --- | --- |
 | `npm run dev` | Run the API with file watching |
+| `npm run dev:worker` | Run the BullMQ report worker with file watching |
 | `npm start` | Run the API once |
+| `npm run worker` | Run the BullMQ report worker once |
 | `npm run prisma:generate` | Generate Prisma client types |
 | `npm test` | Placeholder script; automated tests are not implemented yet |
 

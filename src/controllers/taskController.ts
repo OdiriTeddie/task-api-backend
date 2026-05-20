@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { reportQueue } from "../queues/reportQueue.js";
 import {
   createTaskForUser,
   deleteOwnedTask,
@@ -87,4 +88,15 @@ export const transferTask = async (req: Request, res: Response) => {
       error: error instanceof Error ? error.message : "Transfer failed",
     });
   }
+};
+
+export const tasksStats = async (req: Request, res: Response) => {
+  const userId = "1234";
+  await reportQueue.add("generate-report", {
+    userId,
+  });
+
+  return res.status(202).json({
+    message: "Report generation started",
+  });
 };
