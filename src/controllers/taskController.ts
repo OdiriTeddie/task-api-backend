@@ -91,15 +91,25 @@ export const transferTask = async (req: Request, res: Response) => {
 };
 
 export const tasksStats = async (req: Request, res: Response) => {
-  const userId = "1234";
-  const job = await reportQueue.add("generate-report", {
-    userId,
-  });
+  const userId = Number(req.user?.userId);
+  const job = await reportQueue.add(
+    "generate-report",
+    {
+      userId,
+    },
+    {
+      attempts: 3,
+      backoff: {
+        type: "exponential",
+        delay: 5000,
+      },
+    },
+  );
 
   return res.status(202).json({
     message: "Report generation started",
     jobId: job.id,
-    statusUrl: `/tasks/stats/${job.id}`,
+    statusUrl: `/tasks/reports/${job.id}`,
   });
 };
 

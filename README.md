@@ -1,22 +1,39 @@
-# Task API
+# Task API Backend
 
-A TypeScript REST API for authenticated task management, built with Express 5, PostgreSQL, Prisma, JWT authentication, bcrypt password hashing, and Zod request validation.
+A learning-focused TypeScript backend project for practicing production-style backend patterns in a small task-management domain.
 
-This repository is intentionally small in surface area but structured like a production backend rather than a tutorial-only CRUD sample. It demonstrates:
+This is not positioned as a full task-management product. It is an open backend engineering lab that demonstrates how common API, database, authentication, authorization, transaction, audit, and background-job patterns fit together in a real codebase.
 
-- ESM-first TypeScript configuration with `tsx`
-- Layered routing, controller, middleware, and validator modules
-- JWT-protected user and task endpoints
-- PostgreSQL persistence through Prisma and the `@prisma/adapter-pg` driver adapter
-- Request validation before controller execution
-- Per-user task ownership checks on reads and deletes
-- Query-driven filtering and sorting for task retrieval
+## Why This Project Exists
+
+Much of my production work lives in private organization repositories. This public repository gives recruiters, collaborators, and other learners a transparent code sample that shows how I think through backend structure and implementation tradeoffs.
+
+The domain is intentionally familiar: users own tasks. The engineering focus is on the backend concepts around that domain.
+
+## Backend Concepts Demonstrated
+
+- REST API design with Express 5
+- ESM-first TypeScript setup
+- Route, controller, service, queue, and worker separation
+- JWT authentication middleware
+- bcrypt password hashing
+- Authenticated `/me` endpoint for frontend app bootstrapping
+- Ownership-based authorization for task access
+- PostgreSQL persistence with Prisma
+- Prisma migrations and relational modeling
+- Zod request validation
+- Task ownership transfer inside a database transaction
+- Transfer history with `TaskTransfer`
+- General activity tracking with `AuditLog`
+- Redis-backed background jobs with BullMQ
+- Separate worker process for report generation
+- Environment-based configuration
 
 ## Tech Stack
 
 | Area | Tooling |
 | --- | --- |
-| Runtime | Node.js with ESM modules |
+| Runtime | Node.js |
 | Language | TypeScript |
 | HTTP server | Express 5 |
 | Database | PostgreSQL |
@@ -24,69 +41,57 @@ This repository is intentionally small in surface area but structured like a pro
 | Auth | JSON Web Tokens |
 | Password security | bcrypt |
 | Validation | Zod |
+| Queue | BullMQ |
+| Queue backing store | Redis |
 | Dev runner | tsx |
 
-## Project Structure
+## Architecture
 
 ```text
-.
-|-- prisma/
-|   |-- migrations/
-|   `-- schema.prisma
-|-- src/
-|   |-- controllers/
-|   |   |-- authController.ts
-|   |   |-- meController.ts
-|   |   `-- taskController.ts
-|   |-- middleware/
-|   |   `-- auth.ts
-|   |-- routes/
-|   |   |-- authRoutes.ts
-|   |   |-- meRoutes.ts
-|   |   `-- taskRoutes.ts
-|   |-- types/
-|   |   `-- express.d.ts
-|   |-- validators/
-|   |   `-- task.validator.ts
-|   `-- app.ts
-|-- prismaClient.ts
-|-- prisma.config.ts
-|-- package.json
-`-- tsconfig.json
+HTTP request
+  -> route
+  -> middleware
+  -> controller
+  -> service
+  -> Prisma/PostgreSQL or BullMQ/Redis
 ```
+
+```text
+src/
+|-- controllers/   HTTP request and response handling
+|-- services/      Business logic and database operations
+|-- routes/        Express route registration
+|-- middleware/    Authentication middleware
+|-- validators/    Zod request validation
+|-- queues/        BullMQ queue definitions
+|-- workers/       Background job processors
+|-- lib/           Shared infrastructure clients
+`-- types/         TypeScript declaration merging
+```
+
+More detail is available in [docs/architecture.md](docs/architecture.md).
 
 ## Core Domain
 
 ### User
 
-- `id`
-- `email`
-- `password`
-- `createdAt`
+A user can register, log in, retrieve their current profile through `/me`, create tasks, own tasks, and transfer owned tasks to another user.
 
 ### Task
 
-- `id`
-- `userId`
-- `title`
-- `completed`
-- `createdAt`
+A task is owned by a user through `Task.userId`. Protected task reads and deletes are scoped to the authenticated user.
 
-Each task belongs to a user. Protected task queries are scoped to the authenticated user rather than operating globally.
+### TaskTransfer
 
-## Environment Variables
+A transfer record captures ownership movement from one user to another.
 
-Create a `.env` file in the project root:
+### AuditLog
 
-```env
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/task_app"
-JWT_SECRET="replace-with-a-long-random-secret"
-REDIS_HOST="localhost"
-REDIS_PORT="6379"
-```
+An audit log records user actions at a broader system level. For example, a transfer can create both a `TaskTransfer` domain record and an `AuditLog` activity record.
 
-`DATABASE_URL` is consumed by both Prisma configuration and the runtime Prisma client. `JWT_SECRET` is required for signing and verifying access tokens.
-`REDIS_HOST` and `REDIS_PORT` configure the BullMQ queue and worker. They default to `localhost` and `6379` if omitted.
+### Report Jobs
+
+Task reports are queued through BullMQ and processed by a separate worker process. This keeps longer-running work outside the normal API request lifecycle.
 
 ## Getting Started
 
@@ -96,34 +101,63 @@ REDIS_PORT="6379"
 npm install
 ```
 
-### 2. Configure PostgreSQL
+### 2. Create environment variables
+
+Copy the example environment file:
+
+```bash
+cp .env.example .env
+```
+
+On Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Then update the values for your local setup.
+
+Required variables:
+
+```env
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/task_app"
+JWT_SECRET="replace-with-a-long-random-secret"
+REDIS_HOST="localhost"
+REDIS_PORT="6379"
+```
+
+### 3. Configure PostgreSQL
 
 Create a PostgreSQL database and make sure `DATABASE_URL` points to it.
 
-### 3. Apply database migrations
+### 4. Apply migrations
 
 ```bash
 npx prisma migrate dev
 ```
 
-### 4. Generate the Prisma client
+### 5. Generate Prisma client
 
 ```bash
 npm run prisma:generate
 ```
 
-### 5. Start the API
+### 6. Start Redis
 
-Development mode:
+BullMQ needs Redis running before report jobs can be queued or processed.
+
+One quick Docker option:
+
+```bash
+docker run --name task-app-redis -p 6379:6379 -d redis:7-alpine
+```
+
+If Redis is already installed and running locally, no Docker command is needed.
+
+### 7. Start the API
 
 ```bash
 npm run dev
-```
-
-Run once:
-
-```bash
-npm start
 ```
 
 The API listens on:
@@ -132,39 +166,28 @@ The API listens on:
 http://localhost:3000
 ```
 
-### 6. Start Redis and the BullMQ worker
+### 8. Start the report worker
 
-BullMQ needs Redis running before jobs can be queued or processed. This project expects Redis at `localhost:6379` by default.
-
-If Redis is already installed and running locally, no extra command is needed. On Windows with Docker available, one common local option is:
-
-```bash
-docker run --name task-app-redis -p 6379:6379 -d redis:7-alpine
-```
-
-Run the worker in a separate terminal from the API:
+Run this in a second terminal:
 
 ```bash
 npm run dev:worker
 ```
 
-The report job is queued by:
+## Scripts
 
-```http
-GET /tasks/stats
-```
-
-Expected flow:
-
-1. Redis is listening on `localhost:6379`.
-2. The API runs with `npm run dev`.
-3. The worker runs with `npm run dev:worker`.
-4. Requesting `GET http://localhost:3000/tasks/stats` returns `202`.
-5. The worker terminal logs the report generation messages and job completion.
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Run the API with file watching |
+| `npm run dev:worker` | Run the BullMQ report worker with file watching |
+| `npm start` | Run the API once |
+| `npm run worker` | Run the BullMQ report worker once |
+| `npm run prisma:generate` | Generate Prisma client types |
+| `npm test` | Placeholder script; automated tests are not implemented yet |
 
 ## Authentication Flow
 
-1. Register a user with email and password.
+1. Register with email and password.
 2. Log in with the same credentials.
 3. Receive a JWT valid for one hour.
 4. Send the token on protected routes:
@@ -196,6 +219,14 @@ Authorization: Bearer <token>
 | `GET` | `/tasks/:id` | Fetch one owned task |
 | `POST` | `/tasks` | Create a task |
 | `DELETE` | `/tasks/:id` | Delete one owned task |
+| `POST` | `/tasks/:id/transfer` | Transfer an owned task to another user |
+
+### Reports
+
+| Method | Route | Description |
+| --- | --- | --- |
+| `POST` | `/tasks/reports` | Queue a background task report job |
+| `GET` | `/tasks/reports/:jobId` | Check the BullMQ report job status |
 
 ## Request Examples
 
@@ -251,25 +282,44 @@ Supported query parameters:
 | `completed` | `/tasks?completed=true` | Filter by completion state |
 | `sort` | `/tasks?sort=createdAt` | Sort tasks by creation time |
 
-### Fetch the Current User
+### Transfer a Task
 
 ```bash
-curl http://localhost:3000/me \
+curl -X POST http://localhost:3000/tasks/1/transfer \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <jwt>" \
+  -d '{"recipientEmail":"teammate@example.com"}'
+```
+
+Only the current owner can transfer a task. The transfer updates the task owner, writes a transfer history record, and writes an audit log record inside one transaction.
+
+### Queue a Report Job
+
+```bash
+curl -X POST http://localhost:3000/tasks/reports \
+  -H "Authorization: Bearer <jwt>"
+```
+
+Example response:
+
+```json
+{
+  "message": "Report generation started",
+  "jobId": "1",
+  "statusUrl": "/tasks/reports/1"
+}
+```
+
+### Check Report Job Status
+
+```bash
+curl http://localhost:3000/tasks/reports/1 \
   -H "Authorization: Bearer <jwt>"
 ```
 
 ## Validation and Error Handling
 
-Task creation is validated with Zod before controller logic runs:
-
-```json
-{
-  "title": "At least 3 characters",
-  "completed": false
-}
-```
-
-The API returns explicit error responses for cases such as:
+Task creation is validated with Zod before controller logic runs. The API also returns explicit errors for cases such as:
 
 - Missing credentials
 - Duplicate registration attempts
@@ -279,55 +329,33 @@ The API returns explicit error responses for cases such as:
 - Unknown task identifiers
 - Invalid task filters or sort parameters
 - Invalid request payloads
+- Unauthorized transfer attempts
+- Unknown report job ids
 
 ## Security and Ownership Notes
 
 - Passwords are stored as bcrypt hashes.
 - Authenticated routes rely on JWT verification middleware.
-- Task reads and deletes are constrained by both task id and authenticated user id.
+- Task reads and deletes are constrained by authenticated user id.
+- Task transfer requires the authenticated user to be the current owner.
 - Tokens are issued with a one-hour expiration window.
-- The API avoids returning raw password values in authentication responses.
+- `/me` returns selected user fields and does not expose password hashes.
 
-## Scripts
+## Current Limitations
 
-| Command | Purpose |
-| --- | --- |
-| `npm run dev` | Run the API with file watching |
-| `npm run dev:worker` | Run the BullMQ report worker with file watching |
-| `npm start` | Run the API once |
-| `npm run worker` | Run the BullMQ report worker once |
-| `npm run prisma:generate` | Generate Prisma client types |
-| `npm test` | Placeholder script; automated tests are not implemented yet |
+This repository is intentionally evolving. Current gaps include:
 
-## Why This Repository Exists
+- Automated tests are not implemented yet.
+- Report jobs currently demonstrate background processing but do not persist report files or results to a report table.
+- Error handling is still controller-local rather than centralized.
+- Docker Compose is not added yet for full PostgreSQL and Redis provisioning.
+- OpenAPI documentation is not added yet.
 
-Much of my day-to-day production work lives in private organization repositories. This public project is meant to provide a transparent code sample that still demonstrates practical backend concerns:
+## Roadmap and Contributing
 
-- database-backed API design
-- authentication middleware
-- data ownership boundaries
-- validation before persistence
-- TypeScript module configuration
-- Prisma-backed relational modeling
+See [ROADMAP.md](ROADMAP.md) for planned backend learning milestones.
 
-## Current Scope and Roadmap
-
-Implemented:
-
-- User registration and login
-- JWT-protected user lookup
-- Task creation, retrieval, filtering, and deletion
-- PostgreSQL persistence with Prisma migrations
-- Initial request validation
-
-Good next extensions:
-
-- Automated tests for auth middleware, validation, and task ownership
-- Update task endpoint
-- Refresh token or session lifecycle improvements
-- Centralized error middleware
-- OpenAPI or Postman/Insomnia collection
-- Docker Compose for local PostgreSQL provisioning
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution notes.
 
 ## License
 

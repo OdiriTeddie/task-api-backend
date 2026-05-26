@@ -1,5 +1,5 @@
 {
-  "name": "node-learn",
+  "name": "task-api-backend",
   "version": "1.0.0",
   "type": "module",
   "main": "app.ts",
@@ -13,7 +13,7 @@
   },
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "Learning-focused TypeScript backend implementing auth, Prisma/PostgreSQL, task ownership, transfer transactions, audit logs, Redis queues, and BullMQ workers.",
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",

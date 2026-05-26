@@ -10,6 +10,12 @@ const worker = new Worker(
 
     console.log(`Generating report for user ${job.data.userId}`);
 
+    // console.log(`Attempt ${job.attemptsMade + 1}`);
+
+    // if (job.attemptsMade < 2) {
+    //   throw new Error("Temporary report generation failure");
+    // }
+
     await new Promise((resolve) => setTimeout(resolve, 5000));
 
     console.log("Report generated");

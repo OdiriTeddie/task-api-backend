@@ -14,8 +14,8 @@ import { validateCreateTask } from "../validators/task.validator.js";
 const router = Router();
 
 router.get("/", authMiddleware, getAllTasks);
-router.get("/stats", tasksStats);
-router.get("/stats/:jobId", getTaskStatsStatus);
+router.post("/reports", authMiddleware, tasksStats);
+router.get("/reports/:jobId", authMiddleware, getTaskStatsStatus);
 router.get("/:id", authMiddleware, getTaskById);
 router.post("/", authMiddleware, validateCreateTask, createTask);
 router.delete("/:id", authMiddleware, deleteTask);
