@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { reminderQueue } from "../queues/reminderQueue.js";
 import { reportQueue } from "../queues/reportQueue.js";
 import {
   createTaskForUser,
@@ -40,15 +41,42 @@ export const getTaskById = async (req: Request, res: Response) => {
 };
 
 export const createTask = async (req: Request, res: Response) => {
+  const { title, completed, dueDate } = req.body;
+
+  if (!title) {
+    return res.status(400).json({ error: "Title is required" });
+  }
+
   const task = await createTaskForUser({
     userId: Number(req.user?.userId),
-    title: req.body.title,
-    completed: req.body.completed,
+    title: title,
+    completed: completed || false,
   });
+
+  const reminderTime = dueDate.getTime() - 30 * 60 * 1000;
+  const delay = reminderTime - Date.now();
+
+  const job = await reminderQueue.add(
+    "task-reminder",
+    {
+      userId: Number(req.user?.userId),
+      taskId: task.id,
+      title: task.title,
+    },
+    {
+      delay: delay,
+      attempts: 3,
+      backoff: {
+        type: "exponential",
+        delay: 5000,
+      },
+    },
+  );
 
   res.status(201).json({
     message: "Task created",
     task,
+    reminderJobId: job.id,
   });
 };
 

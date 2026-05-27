@@ -11,6 +11,7 @@ model Task {
   userId        Int 
   title         String
   completed     Boolean  @default(false)
+  dueDate       DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
