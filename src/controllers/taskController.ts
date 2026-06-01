@@ -14,12 +14,25 @@ import {
 
 export const listTasks = async (req: Request, res: Response) => {
   try {
+    const page = Number(req.query.page ?? 1);
+    const limit = Number(req.query.limit ?? 10);
+
+    if (!Number.isInteger(page) || page < 1) {
+      return res.status(400).json({ error: "page must be a positive integer" });
+    }
+
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      return res.status(400).json({
+        error: "limit must be a positive integer between 1 and 100",
+      });
+    }
+
     const result = await listUserTasks({
       userId: Number(req.user?.userId),
       completed: req.query.completed as string | undefined,
       sort: req.query.sort as string | undefined,
-      page: Number(req.query.page ?? 1),
-      limit: Number(req.query.limit ?? 10),
+      page,
+      limit,
     });
 
     res.json(result);
