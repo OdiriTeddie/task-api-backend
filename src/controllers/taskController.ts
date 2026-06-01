@@ -14,13 +14,15 @@ import {
 
 export const listTasks = async (req: Request, res: Response) => {
   try {
-    const tasks = await listUserTasks({
+    const result = await listUserTasks({
       userId: Number(req.user?.userId),
       completed: req.query.completed as string | undefined,
       sort: req.query.sort as string | undefined,
+      page: Number(req.query.page ?? 1),
+      limit: Number(req.query.limit ?? 10),
     });
 
-    res.json(tasks);
+    res.json(result);
   } catch (error) {
     res.status(400).json({
       error: error instanceof Error ? error.message : "Invalid request",
@@ -38,7 +40,9 @@ export const getTaskById = async (req: Request, res: Response) => {
     return res.status(404).json({ error: "Task Not Found" });
   }
 
-  res.json(task);
+  res.json({
+    data: task,
+  });
 };
 
 export const createTask = async (req: Request, res: Response) => {
@@ -87,9 +91,11 @@ export const createTask = async (req: Request, res: Response) => {
   }
 
   res.status(201).json({
+    data: {
+      task,
+      reminderJobId,
+    },
     message: "Task created",
-    task,
-    reminderJobId,
   });
 };
 
@@ -113,8 +119,10 @@ export const updateTask = async (req: Request, res: Response) => {
   });
 
   res.status(200).json({
+    data: {
+      task: updatedTask,
+    },
     message: "Task updated",
-    task: updatedTask,
   });
 };
 
@@ -146,8 +154,10 @@ export const transferTask = async (req: Request, res: Response) => {
     });
 
     res.status(200).json({
+      data: {
+        task,
+      },
       message: "Task transferred",
-      task,
     });
   } catch (error) {
     res.status(400).json({
@@ -208,4 +218,3 @@ export const getTaskReportStatus = async (req: Request, res: Response) => {
     returnvalue: job.returnvalue,
   });
 };
-

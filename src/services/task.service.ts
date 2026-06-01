@@ -1,15 +1,20 @@
 import prisma from "../../prismaClient.js";
+import { CreateTaskDto } from "../validators/task.validator.js";
 
 type ListUserTasksOptions = {
   userId: number;
   completed?: string;
   sort?: string;
+  page?: number;
+  limit?: number;
 };
 
 export const listUserTasks = async ({
   userId,
   completed,
   sort,
+  page = 1,
+  limit = 10,
 }: ListUserTasksOptions) => {
   const where: { userId: number; completed?: boolean } = { userId };
 
@@ -33,10 +38,29 @@ export const listUserTasks = async ({
     orderBy = { createdAt: "asc" };
   }
 
-  return prisma.task.findMany({
-    where,
-    orderBy,
-  });
+  const skip = (page - 1) * limit;
+
+  const [tasks, total] = await prisma.$transaction([
+    prisma.task.findMany({
+      where,
+      orderBy,
+      skip,
+      take: limit,
+    }),
+    prisma.task.count({
+      where,
+    }),
+  ]);
+
+  return {
+    data: tasks,
+    meta: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
 };
 
 export const getUserTaskById = async ({
@@ -59,12 +83,7 @@ export const createUserTask = async ({
   title,
   completed,
   dueDate,
-}: {
-  userId: number;
-  title: string;
-  completed?: boolean;
-  dueDate?: Date;
-}) => {
+}: CreateTaskDto & { userId: number }) => {
   return prisma.task.create({
     data: {
       title,

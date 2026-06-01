@@ -7,6 +7,8 @@ const CreateTaskSchema = z.object({
   dueDate: z.coerce.date().optional(),
 });
 
+export type CreateTaskDto = z.infer<typeof CreateTaskSchema>;
+
 export const validateCreateTask = (
   req: Request,
   res: Response,
