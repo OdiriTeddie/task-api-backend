@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "tsx watch src/app.ts",
     "dev:worker": "tsx watch src/workers/reportWorker.ts",
+    "dev:worker:reminders": "tsx watch src/workers/reminderWorker.ts",
     "start": "tsx src/app.ts",
     "worker": "tsx src/workers/reportWorker.ts",
+    "worker:reminders": "tsx src/workers/reminderWorker.ts",
     "prisma:generate": "prisma generate",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

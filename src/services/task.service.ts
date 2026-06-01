@@ -1,16 +1,16 @@
 import prisma from "../../prismaClient.js";
 
-type GetTasksOptions = {
+type ListUserTasksOptions = {
   userId: number;
   completed?: string;
   sort?: string;
 };
 
-export const getTasksForUser = async ({
+export const listUserTasks = async ({
   userId,
   completed,
   sort,
-}: GetTasksOptions) => {
+}: ListUserTasksOptions) => {
   const where: { userId: number; completed?: boolean } = { userId };
 
   let orderBy: { id?: "asc" | "desc"; createdAt?: "asc" | "desc" } = {
@@ -39,7 +39,13 @@ export const getTasksForUser = async ({
   });
 };
 
-export const getOwnedTaskById = async (taskId: number, userId: number) => {
+export const getUserTaskById = async ({
+  taskId,
+  userId,
+}: {
+  taskId: number;
+  userId: number;
+}) => {
   return prisma.task.findUnique({
     where: {
       id: taskId,
@@ -48,26 +54,61 @@ export const getOwnedTaskById = async (taskId: number, userId: number) => {
   });
 };
 
-export const createTaskForUser = async ({
+export const createUserTask = async ({
   userId,
   title,
   completed,
+  dueDate,
 }: {
   userId: number;
   title: string;
   completed?: boolean;
+  dueDate?: Date;
 }) => {
   return prisma.task.create({
     data: {
       title,
       userId,
       completed: completed ?? false,
+      dueDate,
     },
   });
 };
 
-export const deleteOwnedTask = async (taskId: number, userId: number) => {
-  const task = await getOwnedTaskById(taskId, userId);
+export const updateUserTask = async ({
+  taskId,
+  userId,
+  title,
+  completed,
+  dueDate,
+}: {
+  taskId: number;
+  userId: number;
+  title?: string;
+  completed?: boolean;
+  dueDate?: Date | null;
+}) => {
+  return prisma.task.update({
+    where: {
+      id: taskId,
+      userId,
+    },
+    data: {
+      title,
+      completed,
+      dueDate,
+    },
+  });
+};
+
+export const deleteUserTask = async ({
+  taskId,
+  userId,
+}: {
+  taskId: number;
+  userId: number;
+}) => {
+  const task = await getUserTaskById({ taskId, userId });
 
   if (!task) {
     return null;
@@ -80,7 +121,7 @@ export const deleteOwnedTask = async (taskId: number, userId: number) => {
   return task;
 };
 
-export const transferTrask = async ({
+export const transferUserTask = async ({
   taskId,
   currentUserId,
   recipientEmail,

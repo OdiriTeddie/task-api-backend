@@ -2,7 +2,7 @@
 
 A learning-focused TypeScript backend project for practicing production-style backend patterns in a small task-management domain.
 
-This is not positioned as a full task-management product. It is an open backend engineering lab that demonstrates how common API, database, authentication, authorization, transaction, audit, and background-job patterns fit together in a real codebase.
+This is not positioned as a full task-management product. It is an open backend engineering lab that demonstrates how common API, database, authentication, authorization, caching, transactions, audit logging, and background-job patterns fit together in a real codebase.
 
 ## Why This Project Exists
 
@@ -18,15 +18,18 @@ The domain is intentionally familiar: users own tasks. The engineering focus is 
 - JWT authentication middleware
 - bcrypt password hashing
 - Authenticated `/me` endpoint for frontend app bootstrapping
+- Redis caching for stable user profile reads
 - Ownership-based authorization for task access
 - PostgreSQL persistence with Prisma
 - Prisma migrations and relational modeling
 - Zod request validation
+- Optional task due dates
+- Delayed reminder jobs for due or almost-due tasks
 - Task ownership transfer inside a database transaction
 - Transfer history with `TaskTransfer`
 - General activity tracking with `AuditLog`
 - Redis-backed background jobs with BullMQ
-- Separate worker process for report generation
+- Separate queues and workers for reports and reminders
 - Environment-based configuration
 
 ## Tech Stack
@@ -41,6 +44,7 @@ The domain is intentionally familiar: users own tasks. The engineering focus is 
 | Auth | JSON Web Tokens |
 | Password security | bcrypt |
 | Validation | Zod |
+| Cache | Redis with ioredis |
 | Queue | BullMQ |
 | Queue backing store | Redis |
 | Dev runner | tsx |
@@ -53,13 +57,13 @@ HTTP request
   -> middleware
   -> controller
   -> service
-  -> Prisma/PostgreSQL or BullMQ/Redis
+  -> Prisma/PostgreSQL, Redis cache, or BullMQ/Redis
 ```
 
 ```text
 src/
 |-- controllers/   HTTP request and response handling
-|-- services/      Business logic and database operations
+|-- services/      Business logic, data access, and cache-aware reads
 |-- routes/        Express route registration
 |-- middleware/    Authentication middleware
 |-- validators/    Zod request validation
@@ -69,6 +73,11 @@ src/
 `-- types/         TypeScript declaration merging
 ```
 
+Redis is used in two ways:
+
+- `redisConnectionOptions` provides shared Redis connection settings for BullMQ queues and workers.
+- `redisCache` is an ioredis client used directly by services for cache commands such as `get`, `set`, and `del`.
+
 More detail is available in [docs/architecture.md](docs/architecture.md).
 
 ## Core Domain
@@ -77,9 +86,13 @@ More detail is available in [docs/architecture.md](docs/architecture.md).
 
 A user can register, log in, retrieve their current profile through `/me`, create tasks, own tasks, and transfer owned tasks to another user.
 
+`GET /me` is cached per user with a short Redis TTL because it is small, stable, and commonly requested during frontend app startup.
+
 ### Task
 
 A task is owned by a user through `Task.userId`. Protected task reads and deletes are scoped to the authenticated user.
+
+Tasks can also include an optional `dueDate`. When a task has a due date, the API can queue a delayed reminder job to notify when the task is almost due.
 
 ### TaskTransfer
 
@@ -91,7 +104,11 @@ An audit log records user actions at a broader system level. For example, a tran
 
 ### Report Jobs
 
-Task reports are queued through BullMQ and processed by a separate worker process. This keeps longer-running work outside the normal API request lifecycle.
+Task reports are queued through BullMQ and processed by a separate report worker process. This keeps longer-running work outside the normal API request lifecycle.
+
+### Reminder Jobs
+
+Task reminders use a separate BullMQ queue and worker from report jobs. This keeps reminder processing independent from report generation, which is closer to how larger systems separate job domains.
 
 ## Getting Started
 
@@ -144,7 +161,7 @@ npm run prisma:generate
 
 ### 6. Start Redis
 
-BullMQ needs Redis running before report jobs can be queued or processed.
+Redis is required for BullMQ jobs and `/me` caching.
 
 One quick Docker option:
 
@@ -166,12 +183,20 @@ The API listens on:
 http://localhost:3000
 ```
 
-### 8. Start the report worker
+### 8. Start workers
 
-Run this in a second terminal:
+Run workers in separate terminals from the API.
+
+Report worker:
 
 ```bash
 npm run dev:worker
+```
+
+Reminder worker:
+
+```bash
+npm run dev:worker:reminders
 ```
 
 ## Scripts
@@ -180,8 +205,10 @@ npm run dev:worker
 | --- | --- |
 | `npm run dev` | Run the API with file watching |
 | `npm run dev:worker` | Run the BullMQ report worker with file watching |
+| `npm run dev:worker:reminders` | Run the BullMQ reminder worker with file watching |
 | `npm start` | Run the API once |
 | `npm run worker` | Run the BullMQ report worker once |
+| `npm run worker:reminders` | Run the BullMQ reminder worker once |
 | `npm run prisma:generate` | Generate Prisma client types |
 | `npm test` | Placeholder script; automated tests are not implemented yet |
 
@@ -209,7 +236,7 @@ Authorization: Bearer <token>
 
 | Method | Route | Description |
 | --- | --- | --- |
-| `GET` | `/me` | Return the authenticated user |
+| `GET` | `/me` | Return the authenticated user, using Redis cache when available |
 
 ### Tasks
 
@@ -217,7 +244,7 @@ Authorization: Bearer <token>
 | --- | --- | --- |
 | `GET` | `/tasks` | List tasks for the authenticated user |
 | `GET` | `/tasks/:id` | Fetch one owned task |
-| `POST` | `/tasks` | Create a task |
+| `POST` | `/tasks` | Create a task and optionally schedule a reminder |
 | `DELETE` | `/tasks/:id` | Delete one owned task |
 | `POST` | `/tasks/:id/transfer` | Transfer an owned task to another user |
 
@@ -259,6 +286,15 @@ Example response:
 }
 ```
 
+### Fetch Current User
+
+```bash
+curl http://localhost:3000/me \
+  -H "Authorization: Bearer <jwt>"
+```
+
+The service checks Redis first using a per-user key, then falls back to PostgreSQL and stores the result with a short TTL.
+
 ### Create a Task
 
 ```bash
@@ -267,6 +303,17 @@ curl -X POST http://localhost:3000/tasks \
   -H "Authorization: Bearer <jwt>" \
   -d '{"title":"Prepare backend portfolio notes","completed":false}'
 ```
+
+### Create a Task With a Due Date
+
+```bash
+curl -X POST http://localhost:3000/tasks \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <jwt>" \
+  -d '{"title":"Submit report","completed":false,"dueDate":"2026-06-01T09:00:00.000Z"}'
+```
+
+When a due date is present, the API can enqueue a delayed reminder job. The reminder worker processes jobs from `reminder-queue`.
 
 ### List Tasks
 
@@ -340,6 +387,7 @@ Task creation is validated with Zod before controller logic runs. The API also r
 - Task transfer requires the authenticated user to be the current owner.
 - Tokens are issued with a one-hour expiration window.
 - `/me` returns selected user fields and does not expose password hashes.
+- `/me` cache keys are scoped by authenticated user id to avoid cross-user data leaks.
 
 ## Current Limitations
 
@@ -347,6 +395,8 @@ This repository is intentionally evolving. Current gaps include:
 
 - Automated tests are not implemented yet.
 - Report jobs currently demonstrate background processing but do not persist report files or results to a report table.
+- Reminder jobs currently demonstrate delayed processing, but do not yet persist notification delivery history.
+- Task due-date updates do not yet cancel and reschedule old reminder jobs.
 - Error handling is still controller-local rather than centralized.
 - Docker Compose is not added yet for full PostgreSQL and Redis provisioning.
 - OpenAPI documentation is not added yet.

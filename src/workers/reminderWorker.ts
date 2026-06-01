@@ -1,6 +1,6 @@
 import { Worker } from "bullmq";
 import "dotenv/config";
-import { redisConnection } from "../lib/redisConnection.js";
+import { redisConnectionOptions } from "../lib/redisConnection.js";
 
 const worker = new Worker(
   "reminder-queue",
@@ -17,7 +17,7 @@ const worker = new Worker(
     // Later: send email, push notification, in-app notification, etc.
   },
   {
-    connection: redisConnection,
+    connection: redisConnectionOptions,
   },
 );
 
@@ -29,3 +29,5 @@ worker.on("failed", (job, err) => {
   console.log(`Reminder job ${job?.id} failed`);
   console.log(err.message);
 });
+
+

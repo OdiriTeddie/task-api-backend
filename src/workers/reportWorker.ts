@@ -1,7 +1,7 @@
 import "dotenv/config";
 
 import { Worker } from "bullmq";
-import { redisConnection } from "../lib/redisConnection.js";
+import { redisConnectionOptions } from "../lib/redisConnection.js";
 
 const worker = new Worker(
   "report-queue",
@@ -23,7 +23,7 @@ const worker = new Worker(
     console.log("Email sent");
   },
   {
-    connection: redisConnection,
+    connection: redisConnectionOptions,
   },
 );
 
@@ -36,3 +36,5 @@ worker.on("failed", (job, err) => {
 
   console.log(err.message);
 });
+
+

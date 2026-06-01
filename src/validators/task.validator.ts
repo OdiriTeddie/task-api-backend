@@ -4,6 +4,7 @@ import z from "zod";
 const CreateTaskSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters long"),
   completed: z.boolean().optional(),
+  dueDate: z.coerce.date().optional(),
 });
 
 export const validateCreateTask = (
@@ -16,7 +17,7 @@ export const validateCreateTask = (
   if (!result.success) {
     return res.status(400).json({
       error: "Validation failed",
-      fields: result.error.flatten,
+      fields: result.error.flatten().fieldErrors,
     });
   }
 

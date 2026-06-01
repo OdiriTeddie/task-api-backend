@@ -12,7 +12,7 @@ export const getCurrentUserById = async (id: number) => {
     return JSON.parse(cachedUser);
   }
 
-  const user = prisma.user.findUnique({
+  const user = await prisma.user.findUnique({
     where: { id },
     select: {
       id: true,
@@ -34,3 +34,4 @@ export const getCurrentUserById = async (id: number) => {
 
   return user;
 };
+
