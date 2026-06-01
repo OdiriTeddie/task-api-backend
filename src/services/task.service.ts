@@ -7,6 +7,7 @@ type ListUserTasksOptions = {
   sort?: string;
   page?: number;
   limit?: number;
+  search?: string;
 };
 
 export const listUserTasks = async ({
@@ -15,8 +16,13 @@ export const listUserTasks = async ({
   sort,
   page = 1,
   limit = 10,
+  search,
 }: ListUserTasksOptions) => {
-  const where: { userId: number; completed?: boolean } = { userId };
+  const where: {
+    userId: number;
+    completed?: boolean;
+    title?: { contains: string; mode: "insensitive" };
+  } = { userId };
 
   let orderBy: { id?: "asc" | "desc"; createdAt?: "asc" | "desc" } = {
     id: "asc",
@@ -28,6 +34,13 @@ export const listUserTasks = async ({
     }
 
     where.completed = completed === "true";
+  }
+
+  if (search !== undefined && search.trim() !== "") {
+    where.title = {
+      contains: search.trim(),
+      mode: "insensitive",
+    };
   }
 
   if (sort !== undefined) {
@@ -58,7 +71,7 @@ export const listUserTasks = async ({
       page,
       limit,
       total,
-      totalPages: Math.ceil(total / limit),
+      totalPages: total === 0 ? 0 : Math.ceil(total / limit),
     },
   };
 };

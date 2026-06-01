@@ -31,6 +31,7 @@ export const listTasks = async (req: Request, res: Response) => {
       userId: Number(req.user?.userId),
       completed: req.query.completed as string | undefined,
       sort: req.query.sort as string | undefined,
+      search: req.query.search as string | undefined,
       page,
       limit,
     });
