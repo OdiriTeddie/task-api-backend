@@ -45,7 +45,7 @@ const getTaskListCacheKey = ({
   ].join(":");
 };
 
-export const invalidateUserTaskListCache = async (userId: number) => {
+const invalidateUserTaskListCache = async (userId: number) => {
   await redisCache.incr(getTaskListVersionKey(userId));
 };
 
@@ -237,7 +237,7 @@ export const transferUserTask = async ({
   currentUserId: number;
   recipientEmail: string;
 }) => {
-  return await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const task = await tx.task.findUnique({
       where: {
         id: taskId,
@@ -296,9 +296,14 @@ export const transferUserTask = async ({
       },
     });
 
-    await invalidateUserTaskListCache(currentUserId);
-    await invalidateUserTaskListCache(recipient.id);
-
-    return updatedTask;
+    return {
+      updatedTask,
+      recipientUserId: recipient.id,
+    };
   });
+
+  await invalidateUserTaskListCache(currentUserId);
+  await invalidateUserTaskListCache(result.recipientUserId);
+
+  return result.updatedTask;
 };

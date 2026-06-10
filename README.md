@@ -19,7 +19,9 @@ The domain is intentionally familiar: users own tasks. The engineering focus is 
 - bcrypt password hashing
 - Authenticated `/me` endpoint for frontend app bootstrapping
 - Redis caching for stable user profile reads
+- Versioned Redis caching for paginated task-list reads
 - Ownership-based authorization for task access
+- Task list pagination, filtering, sorting, and title search
 - PostgreSQL persistence with Prisma
 - Prisma migrations and relational modeling
 - Zod request validation
@@ -92,7 +94,11 @@ A user can register, log in, retrieve their current profile through `/me`, creat
 
 A task is owned by a user through `Task.userId`. Protected task reads and deletes are scoped to the authenticated user.
 
+Task list responses use a `{ data, meta }` response shape. The list endpoint supports pagination, completion filtering, creation-date sorting, and title search.
+
 Tasks can also include an optional `dueDate`. When a task has a due date, the API can queue a delayed reminder job to notify when the task is almost due.
+
+Task-list reads are cached in Redis with keys that include user id, filters, search term, page, limit, and a per-user version number. Mutations such as create, update, delete, and transfer increment the version so stale list variants are ignored without deleting every possible cache key.
 
 ### TaskTransfer
 
@@ -245,6 +251,7 @@ Authorization: Bearer <token>
 | `GET` | `/tasks` | List tasks for the authenticated user |
 | `GET` | `/tasks/:id` | Fetch one owned task |
 | `POST` | `/tasks` | Create a task and optionally schedule a reminder |
+| `PATCH` | `/tasks/:id` | Update one owned task |
 | `DELETE` | `/tasks/:id` | Delete one owned task |
 | `POST` | `/tasks/:id/transfer` | Transfer an owned task to another user |
 
@@ -328,6 +335,38 @@ Supported query parameters:
 | --- | --- | --- |
 | `completed` | `/tasks?completed=true` | Filter by completion state |
 | `sort` | `/tasks?sort=createdAt` | Sort tasks by creation time |
+| `search` | `/tasks?search=report` | Search task titles |
+| `page` | `/tasks?page=2` | Select result page |
+| `limit` | `/tasks?limit=10` | Limit results per page, max 100 |
+
+Example list response:
+
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "title": "Submit report",
+      "completed": false
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "limit": 10,
+    "total": 25,
+    "totalPages": 3
+  }
+}
+```
+
+### Update a Task
+
+```bash
+curl -X PATCH http://localhost:3000/tasks/1 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <jwt>" \
+  -d '{"title":"Submit final report","completed":true}'
+```
 
 ### Transfer a Task
 
@@ -374,7 +413,7 @@ Task creation is validated with Zod before controller logic runs. The API also r
 - Missing or malformed bearer tokens
 - Invalid or expired JWTs
 - Unknown task identifiers
-- Invalid task filters or sort parameters
+- Invalid task filters, search, pagination, or sort parameters
 - Invalid request payloads
 - Unauthorized transfer attempts
 - Unknown report job ids
@@ -388,6 +427,7 @@ Task creation is validated with Zod before controller logic runs. The API also r
 - Tokens are issued with a one-hour expiration window.
 - `/me` returns selected user fields and does not expose password hashes.
 - `/me` cache keys are scoped by authenticated user id to avoid cross-user data leaks.
+- Task-list cache keys include authenticated user id and query parameters to avoid cross-user or cross-query data leaks.
 
 ## Current Limitations
 
@@ -410,3 +450,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution notes.
 ## License
 
 ISC
+
+
