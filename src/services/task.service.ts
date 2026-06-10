@@ -1,4 +1,5 @@
 import prisma from "../../prismaClient.js";
+import { redisCache } from "../lib/redisConnection.js";
 import { CreateTaskDto } from "../validators/task.validator.js";
 
 type ListUserTasksOptions = {
@@ -10,6 +11,44 @@ type ListUserTasksOptions = {
   search?: string;
 };
 
+const TASK_LIST_CACHE_TTL_SECONDS = 60;
+
+const getTaskListVersionKey = (userId: number) => {
+  return `tasks:user:${userId}:version`;
+};
+
+const getTaskListCacheKey = ({
+  userId,
+  version,
+  completed,
+  sort,
+  search,
+  page,
+  limit,
+}: {
+  userId: number;
+  version: string;
+  completed?: string;
+  sort?: string;
+  search?: string;
+  page: number;
+  limit: number;
+}) => {
+  return [
+    `tasks:user:${userId}`,
+    `v:${version}`,
+    `completed:${completed ?? "all"}`,
+    `sort:${sort ?? "id"}`,
+    `search:${search?.trim() || "none"}`,
+    `page:${page}`,
+    `limit:${limit}`,
+  ].join(":");
+};
+
+export const invalidateUserTaskListCache = async (userId: number) => {
+  await redisCache.incr(getTaskListVersionKey(userId));
+};
+
 export const listUserTasks = async ({
   userId,
   completed,
@@ -18,6 +57,30 @@ export const listUserTasks = async ({
   limit = 10,
   search,
 }: ListUserTasksOptions) => {
+  const versionKey = getTaskListVersionKey(userId);
+  let version = (await redisCache.get(versionKey)) ?? "0";
+
+  if (!version) {
+    version = "1";
+    await redisCache.set(versionKey, version);
+  }
+
+  const cacheKey = getTaskListCacheKey({
+    userId,
+    version,
+    completed,
+    sort,
+    search,
+    page,
+    limit,
+  });
+
+  const cachedResult = await redisCache.get(cacheKey);
+
+  if (cachedResult) {
+    return JSON.parse(cachedResult);
+  }
+
   const where: {
     userId: number;
     completed?: boolean;
@@ -65,7 +128,7 @@ export const listUserTasks = async ({
     }),
   ]);
 
-  return {
+  const result = {
     data: tasks,
     meta: {
       page,
@@ -74,6 +137,13 @@ export const listUserTasks = async ({
       totalPages: total === 0 ? 0 : Math.ceil(total / limit),
     },
   };
+  await redisCache.set(
+    cacheKey,
+    JSON.stringify(result),
+    "EX",
+    TASK_LIST_CACHE_TTL_SECONDS,
+  );
+  return result;
 };
 
 export const getUserTaskById = async ({
@@ -97,7 +167,7 @@ export const createUserTask = async ({
   completed,
   dueDate,
 }: CreateTaskDto & { userId: number }) => {
-  return prisma.task.create({
+  const task = await prisma.task.create({
     data: {
       title,
       userId,
@@ -105,6 +175,8 @@ export const createUserTask = async ({
       dueDate,
     },
   });
+  await invalidateUserTaskListCache(userId);
+  return task;
 };
 
 export const updateUserTask = async ({
@@ -120,7 +192,7 @@ export const updateUserTask = async ({
   completed?: boolean;
   dueDate?: Date | null;
 }) => {
-  return prisma.task.update({
+  const task = await prisma.task.update({
     where: {
       id: taskId,
       userId,
@@ -131,6 +203,8 @@ export const updateUserTask = async ({
       dueDate,
     },
   });
+  await invalidateUserTaskListCache(userId);
+  return task;
 };
 
 export const deleteUserTask = async ({
@@ -150,6 +224,7 @@ export const deleteUserTask = async ({
     where: { id: taskId },
   });
 
+  await invalidateUserTaskListCache(userId);
   return task;
 };
 
@@ -220,6 +295,9 @@ export const transferUserTask = async ({
         },
       },
     });
+
+    await invalidateUserTaskListCache(currentUserId);
+    await invalidateUserTaskListCache(recipient.id);
 
     return updatedTask;
   });
