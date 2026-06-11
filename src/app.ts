@@ -1,19 +1,13 @@
 import "dotenv/config";
 
 import express from "express";
-const app = express();
+import v1Routes from "./routes/v1/index.js";
 
-import authRoutes from "./routes/authRoutes.js";
-import meRoutes from "./routes/meRoutes.js";
-import taskRoutes from "./routes/taskRoutes.js";
+const app = express();
 
 app.use(express.json());
 
-app.use("/auth", authRoutes);
-
-app.use("/me", meRoutes);
-
-app.use("/tasks", taskRoutes);
+app.use("/api/v1", v1Routes);
 
 app.use((req, res) => {
   res.status(404).send("Not Found");

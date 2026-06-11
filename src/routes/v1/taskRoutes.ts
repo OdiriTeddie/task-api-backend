@@ -8,9 +8,9 @@ import {
   queueTaskReport,
   transferTask,
   updateTask,
-} from "../controllers/taskController.js";
-import { authMiddleware } from "../middleware/auth.js";
-import { validateCreateTask } from "../validators/task.validator.js";
+} from "../../controllers/taskController.js";
+import { authMiddleware } from "../../middleware/auth.js";
+import { validateCreateTask } from "../../validators/task.validator.js";
 
 const router = Router();
 
@@ -24,4 +24,5 @@ router.delete("/:id", authMiddleware, deleteTask);
 router.post("/:id/transfer", authMiddleware, transferTask);
 
 export default router;
+
 

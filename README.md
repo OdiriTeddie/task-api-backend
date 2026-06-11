@@ -13,11 +13,12 @@ The domain is intentionally familiar: users own tasks. The engineering focus is 
 ## Backend Concepts Demonstrated
 
 - REST API design with Express 5
+- Route-level API versioning under `/api/v1`
 - ESM-first TypeScript setup
 - Route, controller, service, queue, and worker separation
 - JWT authentication middleware
 - bcrypt password hashing
-- Authenticated `/me` endpoint for frontend app bootstrapping
+- Authenticated `/api/v1/me` endpoint for frontend app bootstrapping
 - Redis caching for stable user profile reads
 - Versioned Redis caching for paginated task-list reads
 - Ownership-based authorization for task access
@@ -67,6 +68,7 @@ src/
 |-- controllers/   HTTP request and response handling
 |-- services/      Business logic, data access, and cache-aware reads
 |-- routes/        Express route registration
+|   `-- v1/        Versioned public API routes mounted at /api/v1
 |-- middleware/    Authentication middleware
 |-- validators/    Zod request validation
 |-- queues/        BullMQ queue definitions
@@ -82,13 +84,35 @@ Redis is used in two ways:
 
 More detail is available in [docs/architecture.md](docs/architecture.md).
 
+## API Versioning
+
+The public API is mounted under `/api/v1`:
+
+```ts
+app.use("/api/v1", v1Routes);
+```
+
+Versioning currently happens at the route boundary:
+
+```text
+src/routes/v1/
+|-- authRoutes.ts
+|-- meRoutes.ts
+|-- taskRoutes.ts
+`-- index.ts
+```
+
+Controllers, services, validators, queues, and workers remain shared implementation code. This avoids duplicating the whole application before a second API contract actually exists.
+
+If a future `/api/v2` changes only route behavior, a new `src/routes/v2` folder can be added while reusing most controllers and services. If v2 requires different response shapes or business rules, only the affected controllers or services should be split.
+
 ## Core Domain
 
 ### User
 
-A user can register, log in, retrieve their current profile through `/me`, create tasks, own tasks, and transfer owned tasks to another user.
+A user can register, log in, retrieve their current profile through `/api/v1/me`, create tasks, own tasks, and transfer owned tasks to another user.
 
-`GET /me` is cached per user with a short Redis TTL because it is small, stable, and commonly requested during frontend app startup.
+`GET /api/v1/me` is cached per user with a short Redis TTL because it is small, stable, and commonly requested during frontend app startup.
 
 ### Task
 
@@ -167,7 +191,7 @@ npm run prisma:generate
 
 ### 6. Start Redis
 
-Redis is required for BullMQ jobs and `/me` caching.
+Redis is required for BullMQ jobs and `/api/v1/me` caching.
 
 One quick Docker option:
 
@@ -235,39 +259,39 @@ Authorization: Bearer <token>
 
 | Method | Route | Description |
 | --- | --- | --- |
-| `POST` | `/auth/register` | Create a user account |
-| `POST` | `/auth/login` | Authenticate and return a JWT |
+| `POST` | `/api/v1/auth/register` | Create a user account |
+| `POST` | `/api/v1/auth/login` | Authenticate and return a JWT |
 
 ### Current User
 
 | Method | Route | Description |
 | --- | --- | --- |
-| `GET` | `/me` | Return the authenticated user, using Redis cache when available |
+| `GET` | `/api/v1/me` | Return the authenticated user, using Redis cache when available |
 
 ### Tasks
 
 | Method | Route | Description |
 | --- | --- | --- |
-| `GET` | `/tasks` | List tasks for the authenticated user |
-| `GET` | `/tasks/:id` | Fetch one owned task |
-| `POST` | `/tasks` | Create a task and optionally schedule a reminder |
-| `PATCH` | `/tasks/:id` | Update one owned task |
-| `DELETE` | `/tasks/:id` | Delete one owned task |
-| `POST` | `/tasks/:id/transfer` | Transfer an owned task to another user |
+| `GET` | `/api/v1/tasks` | List tasks for the authenticated user |
+| `GET` | `/api/v1/tasks/:id` | Fetch one owned task |
+| `POST` | `/api/v1/tasks` | Create a task and optionally schedule a reminder |
+| `PATCH` | `/api/v1/tasks/:id` | Update one owned task |
+| `DELETE` | `/api/v1/tasks/:id` | Delete one owned task |
+| `POST` | `/api/v1/tasks/:id/transfer` | Transfer an owned task to another user |
 
 ### Reports
 
 | Method | Route | Description |
 | --- | --- | --- |
-| `POST` | `/tasks/reports` | Queue a background task report job |
-| `GET` | `/tasks/reports/:jobId` | Check the BullMQ report job status |
+| `POST` | `/api/v1/tasks/reports` | Queue a background task report job |
+| `GET` | `/api/v1/tasks/reports/:jobId` | Check the BullMQ report job status |
 
 ## Request Examples
 
 ### Register
 
 ```bash
-curl -X POST http://localhost:3000/auth/register \
+curl -X POST http://localhost:3000/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email":"recruiter-demo@example.com","password":"strong-password"}'
 ```
@@ -275,7 +299,7 @@ curl -X POST http://localhost:3000/auth/register \
 ### Login
 
 ```bash
-curl -X POST http://localhost:3000/auth/login \
+curl -X POST http://localhost:3000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"recruiter-demo@example.com","password":"strong-password"}'
 ```
@@ -296,7 +320,7 @@ Example response:
 ### Fetch Current User
 
 ```bash
-curl http://localhost:3000/me \
+curl http://localhost:3000/api/v1/me \
   -H "Authorization: Bearer <jwt>"
 ```
 
@@ -305,7 +329,7 @@ The service checks Redis first using a per-user key, then falls back to PostgreS
 ### Create a Task
 
 ```bash
-curl -X POST http://localhost:3000/tasks \
+curl -X POST http://localhost:3000/api/v1/tasks \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <jwt>" \
   -d '{"title":"Prepare backend portfolio notes","completed":false}'
@@ -314,7 +338,7 @@ curl -X POST http://localhost:3000/tasks \
 ### Create a Task With a Due Date
 
 ```bash
-curl -X POST http://localhost:3000/tasks \
+curl -X POST http://localhost:3000/api/v1/tasks \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <jwt>" \
   -d '{"title":"Submit report","completed":false,"dueDate":"2026-06-01T09:00:00.000Z"}'
@@ -325,7 +349,7 @@ When a due date is present, the API can enqueue a delayed reminder job. The remi
 ### List Tasks
 
 ```bash
-curl http://localhost:3000/tasks \
+curl http://localhost:3000/api/v1/tasks \
   -H "Authorization: Bearer <jwt>"
 ```
 
@@ -333,11 +357,11 @@ Supported query parameters:
 
 | Query | Example | Behavior |
 | --- | --- | --- |
-| `completed` | `/tasks?completed=true` | Filter by completion state |
-| `sort` | `/tasks?sort=createdAt` | Sort tasks by creation time |
-| `search` | `/tasks?search=report` | Search task titles |
-| `page` | `/tasks?page=2` | Select result page |
-| `limit` | `/tasks?limit=10` | Limit results per page, max 100 |
+| `completed` | `/api/v1/tasks?completed=true` | Filter by completion state |
+| `sort` | `/api/v1/tasks?sort=createdAt` | Sort tasks by creation time |
+| `search` | `/api/v1/tasks?search=report` | Search task titles |
+| `page` | `/api/v1/tasks?page=2` | Select result page |
+| `limit` | `/api/v1/tasks?limit=10` | Limit results per page, max 100 |
 
 Example list response:
 
@@ -362,7 +386,7 @@ Example list response:
 ### Update a Task
 
 ```bash
-curl -X PATCH http://localhost:3000/tasks/1 \
+curl -X PATCH http://localhost:3000/api/v1/tasks/1 \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <jwt>" \
   -d '{"title":"Submit final report","completed":true}'
@@ -371,7 +395,7 @@ curl -X PATCH http://localhost:3000/tasks/1 \
 ### Transfer a Task
 
 ```bash
-curl -X POST http://localhost:3000/tasks/1/transfer \
+curl -X POST http://localhost:3000/api/v1/tasks/1/transfer \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <jwt>" \
   -d '{"recipientEmail":"teammate@example.com"}'
@@ -382,7 +406,7 @@ Only the current owner can transfer a task. The transfer updates the task owner,
 ### Queue a Report Job
 
 ```bash
-curl -X POST http://localhost:3000/tasks/reports \
+curl -X POST http://localhost:3000/api/v1/tasks/reports \
   -H "Authorization: Bearer <jwt>"
 ```
 
@@ -392,14 +416,14 @@ Example response:
 {
   "message": "Report generation started",
   "jobId": "1",
-  "statusUrl": "/tasks/reports/1"
+  "statusUrl": "/api/v1/tasks/reports/1"
 }
 ```
 
 ### Check Report Job Status
 
 ```bash
-curl http://localhost:3000/tasks/reports/1 \
+curl http://localhost:3000/api/v1/tasks/reports/1 \
   -H "Authorization: Bearer <jwt>"
 ```
 
@@ -425,8 +449,8 @@ Task creation is validated with Zod before controller logic runs. The API also r
 - Task reads and deletes are constrained by authenticated user id.
 - Task transfer requires the authenticated user to be the current owner.
 - Tokens are issued with a one-hour expiration window.
-- `/me` returns selected user fields and does not expose password hashes.
-- `/me` cache keys are scoped by authenticated user id to avoid cross-user data leaks.
+- `/api/v1/me` returns selected user fields and does not expose password hashes.
+- `/api/v1/me` cache keys are scoped by authenticated user id to avoid cross-user data leaks.
 - Task-list cache keys include authenticated user id and query parameters to avoid cross-user or cross-query data leaks.
 
 ## Current Limitations
@@ -450,5 +474,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution notes.
 ## License
 
 ISC
+
 
 

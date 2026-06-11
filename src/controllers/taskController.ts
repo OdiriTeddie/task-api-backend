@@ -216,7 +216,7 @@ export const queueTaskReport = async (req: Request, res: Response) => {
   return res.status(202).json({
     message: "Report generation started",
     jobId: job.id,
-    statusUrl: `/tasks/reports/${job.id}`,
+    statusUrl: `/api/v1/tasks/reports/${job.id}`,
   });
 };
 
@@ -249,3 +249,4 @@ export const getTaskReportStatus = async (req: Request, res: Response) => {
     returnvalue: job.returnvalue,
   });
 };
+
