@@ -111,7 +111,7 @@ export const listUserTasks = async ({
       throw new Error("sort must be 'createdAt'");
     }
 
-    orderBy = { createdAt: "asc" };
+    orderBy = { createdAt: "desc" };
   }
 
   const skip = (page - 1) * limit;

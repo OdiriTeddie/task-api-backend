@@ -51,7 +51,12 @@ export const getTaskById = async (req: Request, res: Response) => {
   });
 
   if (!task) {
-    return res.status(404).json({ error: "Task Not Found" });
+    return res.status(404).json({
+      error: {
+        code: 404,
+        message: "Task Not Found",
+      },
+    });
   }
 
   res.json({
@@ -63,7 +68,15 @@ export const createTask = async (req: Request, res: Response) => {
   const { title, completed, dueDate } = req.body;
 
   if (!title) {
-    return res.status(400).json({ error: "Title is required" });
+    return res.status(400).json({
+      error: {
+        code: 400,
+        message: "Validation failed",
+        fields: {
+          title: "Title is required",
+        },
+      },
+    });
   }
 
   const userId = Number(req.user?.userId);
@@ -109,7 +122,7 @@ export const createTask = async (req: Request, res: Response) => {
       task,
       reminderJobId,
     },
-    message: "Task created",
+    message: "Task created successfully",
   });
 };
 
@@ -121,7 +134,11 @@ export const updateTask = async (req: Request, res: Response) => {
   const task = await getUserTaskById({ taskId, userId });
 
   if (!task) {
-    return res.status(404).json({ error: "Task Not Found" });
+    return res.status(404).json({
+      error: {
+        message: "Task Not Found",
+      },
+    });
   }
 
   const updatedTask = await updateUserTask({
@@ -136,7 +153,7 @@ export const updateTask = async (req: Request, res: Response) => {
     data: {
       task: updatedTask,
     },
-    message: "Task updated",
+    message: "Task updated successfully",
   });
 };
 
@@ -151,7 +168,7 @@ export const deleteTask = async (req: Request, res: Response) => {
   }
 
   res.status(200).json({
-    message: "Task Deleted",
+    message: "Task Deleted Successfully",
   });
 };
 
@@ -171,7 +188,7 @@ export const transferTask = async (req: Request, res: Response) => {
       data: {
         task,
       },
-      message: "Task transferred",
+      message: "Task transferred successfully",
     });
   } catch (error) {
     res.status(400).json({
