@@ -1,11 +1,13 @@
 import "dotenv/config";
 
 import express from "express";
+import { requestLogger } from "./middleware/requestLogger.js";
 import v1Routes from "./routes/v1/index.js";
 
 const app = express();
 
 app.use(express.json());
+app.use(requestLogger);
 
 app.use("/api/v1", v1Routes);
 
