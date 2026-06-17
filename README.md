@@ -31,6 +31,10 @@ The domain is intentionally familiar: users own tasks. The engineering focus is 
 - Task ownership transfer inside a database transaction
 - Transfer history with `TaskTransfer`
 - General activity tracking with `AuditLog`
+- Structured JSON request logging
+- Request ID tracing with `x-request-id`
+- In-memory HTTP metrics exposed through `/metrics`
+- Health, readiness, liveness, and status endpoints
 - Redis-backed background jobs with BullMQ
 - Separate queues and workers for reports and reminders
 - Environment-based configuration
@@ -69,11 +73,11 @@ src/
 |-- services/      Business logic, data access, and cache-aware reads
 |-- routes/        Express route registration
 |   `-- v1/        Versioned public API routes mounted at /api/v1
-|-- middleware/    Authentication middleware
+|-- middleware/    Authentication, request ID, logging, and metrics middleware
 |-- validators/    Zod request validation
 |-- queues/        BullMQ queue definitions
 |-- workers/       Background job processors
-|-- lib/           Shared infrastructure clients
+|-- lib/           Shared infrastructure clients, logger, and metrics utilities
 `-- types/         TypeScript declaration merging
 ```
 
@@ -105,6 +109,62 @@ src/routes/v1/
 Controllers, services, validators, queues, and workers remain shared implementation code. This avoids duplicating the whole application before a second API contract actually exists.
 
 If a future `/api/v2` changes only route behavior, a new `src/routes/v2` folder can be added while reusing most controllers and services. If v2 requires different response shapes or business rules, only the affected controllers or services should be split.
+
+## Observability
+
+This project includes a small in-house observability layer to demonstrate common backend monitoring concepts without adding a full external observability stack yet.
+
+### Structured Logging
+
+`src/lib/logger.ts` provides a lightweight JSON logger with `info`, `warn`, and `error` levels. Request logs are emitted by `src/middleware/requestLogger.ts` after the response finishes.
+
+Request logs include:
+
+- `requestId`
+- HTTP method
+- request path
+- response status code
+- request duration in milliseconds
+- user agent
+- IP address
+
+### Request ID Tracing
+
+`src/middleware/requestId.ts` assigns every request a traceable request id.
+
+If the client sends an `x-request-id` header, the API reuses it. Otherwise, the API generates a new UUID. The id is attached to `req.requestId`, included in structured request logs, and returned in the response header:
+
+```http
+x-request-id: <request-id>
+```
+
+This makes it easier to correlate a client-reported issue with the matching server-side logs.
+
+### Metrics
+
+`src/lib/metrics.ts` stores lightweight in-memory HTTP metrics. `src/middleware/requestMetrics.ts` records request counts, status code groups, and request duration statistics.
+
+Metrics are exposed at:
+
+```http
+GET /metrics
+```
+
+The metrics endpoint currently returns JSON and resets when the server process restarts.
+
+### Health and Readiness
+
+Operational endpoints are mounted outside `/api/v1` because they are infrastructure endpoints, not versioned product API resources.
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET` | `/ping` | Lightweight liveness check |
+| `GET` | `/health` | Basic process health and uptime |
+| `GET` | `/ready` | Readiness check for PostgreSQL and Redis |
+| `GET` | `/status` | App metadata, environment, uptime, and API version |
+| `GET` | `/metrics` | In-memory request metrics snapshot |
+
+`/ready` returns `200` when required dependencies are available and `503` when the app is not ready to serve traffic.
 
 ## Core Domain
 
@@ -254,6 +314,8 @@ Authorization: Bearer <token>
 ```
 
 ## API Endpoints
+
+Product API routes are versioned under `/api/v1`. Operational routes such as `/health`, `/ready`, and `/metrics` are intentionally mounted outside the versioned API namespace.
 
 ### Auth
 
@@ -427,6 +489,38 @@ curl http://localhost:3000/api/v1/tasks/reports/1 \
   -H "Authorization: Bearer <jwt>"
 ```
 
+## Operational Endpoint Examples
+
+### Ping
+
+```bash
+curl http://localhost:3000/ping
+```
+
+### Health
+
+```bash
+curl http://localhost:3000/health
+```
+
+### Readiness
+
+```bash
+curl http://localhost:3000/ready
+```
+
+### Status
+
+```bash
+curl http://localhost:3000/status
+```
+
+### Metrics
+
+```bash
+curl http://localhost:3000/metrics
+```
+
 ## Validation and Error Handling
 
 Task creation is validated with Zod before controller logic runs. The API also returns explicit errors for cases such as:
@@ -452,6 +546,7 @@ Task creation is validated with Zod before controller logic runs. The API also r
 - `/api/v1/me` returns selected user fields and does not expose password hashes.
 - `/api/v1/me` cache keys are scoped by authenticated user id to avoid cross-user data leaks.
 - Task-list cache keys include authenticated user id and query parameters to avoid cross-user or cross-query data leaks.
+- Request IDs are returned in `x-request-id` response headers and included in request logs.
 
 ## Current Limitations
 
@@ -464,6 +559,8 @@ This repository is intentionally evolving. Current gaps include:
 - Error handling is still controller-local rather than centralized.
 - Docker Compose is not added yet for full PostgreSQL and Redis provisioning.
 - OpenAPI documentation is not added yet.
+- Metrics are in-memory and reset when the server restarts.
+- `/metrics` is public in this learning setup; production systems usually expose metrics only on private networks or behind access controls.
 
 ## Roadmap and Contributing
 
@@ -474,6 +571,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution notes.
 ## License
 
 ISC
-
 
 
