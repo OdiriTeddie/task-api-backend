@@ -1,13 +1,20 @@
 import "dotenv/config";
 
 import express from "express";
+import { getMetricsSnapshot } from "./lib/metrics.js";
 import { requestLogger } from "./middleware/requestLogger.js";
+import { requestMetrics } from "./middleware/requestMetrics.js";
 import v1Routes from "./routes/v1/index.js";
 
 const app = express();
 
 app.use(express.json());
+app.use(requestMetrics);
 app.use(requestLogger);
+
+app.get("/metrics", (req, res) => {
+  res.json(getMetricsSnapshot());
+});
 
 app.use("/api/v1", v1Routes);
 
