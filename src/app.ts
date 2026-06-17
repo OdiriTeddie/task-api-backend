@@ -4,6 +4,7 @@ import express from "express";
 import { getMetricsSnapshot } from "./lib/metrics.js";
 import { requestLogger } from "./middleware/requestLogger.js";
 import { requestMetrics } from "./middleware/requestMetrics.js";
+import healthRoutes from "./routes/healthRoutes.js";
 import v1Routes from "./routes/v1/index.js";
 
 const app = express();
@@ -11,6 +12,8 @@ const app = express();
 app.use(express.json());
 app.use(requestMetrics);
 app.use(requestLogger);
+
+app.use(healthRoutes);
 
 app.get("/metrics", (req, res) => {
   res.json(getMetricsSnapshot());
