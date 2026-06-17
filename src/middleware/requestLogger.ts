@@ -12,6 +12,7 @@ export const requestLogger = (
     const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
 
     const meta = {
+      requestId: req.requestId,
       method: req.method,
       path: req.originalUrl,
       statusCode: res.statusCode,
