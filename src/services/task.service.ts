@@ -1,5 +1,6 @@
 import prisma from "../../prismaClient.js";
 import { redisCache } from "../lib/redisConnection.js";
+import { taskRepository } from "../repositories/task.repository.js";
 import { CreateTaskDto } from "../validators/task.validator.js";
 
 type ListUserTasksOptions = {
@@ -58,7 +59,7 @@ export const listUserTasks = async ({
   search,
 }: ListUserTasksOptions) => {
   const versionKey = getTaskListVersionKey(userId);
-  let version = (await redisCache.get(versionKey)) ?? "0";
+  let version = await redisCache.get(versionKey);
 
   if (!version) {
     version = "1";
@@ -81,50 +82,41 @@ export const listUserTasks = async ({
     return JSON.parse(cachedResult);
   }
 
-  const where: {
-    userId: number;
-    completed?: boolean;
-    title?: { contains: string; mode: "insensitive" };
-  } = { userId };
-
-  let orderBy: { id?: "asc" | "desc"; createdAt?: "asc" | "desc" } = {
-    id: "asc",
-  };
+  let completedFilter: boolean | undefined;
 
   if (completed !== undefined) {
     if (completed !== "true" && completed !== "false") {
       throw new Error("completed must be 'true' or 'false'");
     }
 
-    where.completed = completed === "true";
+    completedFilter = completed === "true";
   }
 
-  if (search !== undefined && search.trim() !== "") {
-    where.title = {
-      contains: search.trim(),
-      mode: "insensitive",
-    };
-  }
+  let sortFilter: "createdAt" | undefined;
 
   if (sort !== undefined) {
     if (sort !== "createdAt") {
       throw new Error("sort must be 'createdAt'");
     }
 
-    orderBy = { createdAt: "desc" };
+    sortFilter = "createdAt";
   }
 
   const skip = (page - 1) * limit;
 
-  const [tasks, total] = await prisma.$transaction([
-    prisma.task.findMany({
-      where,
-      orderBy,
+  const [tasks, total] = await Promise.all([
+    taskRepository.listUserTasks({
+      userId,
+      completed: completedFilter,
+      search,
+      sort: sortFilter,
       skip,
       take: limit,
     }),
-    prisma.task.count({
-      where,
+    taskRepository.countUserTasks({
+      userId,
+      completed: completedFilter,
+      search,
     }),
   ]);
 
@@ -137,15 +129,16 @@ export const listUserTasks = async ({
       totalPages: total === 0 ? 0 : Math.ceil(total / limit),
     },
   };
+
   await redisCache.set(
     cacheKey,
     JSON.stringify(result),
     "EX",
     TASK_LIST_CACHE_TTL_SECONDS,
   );
+
   return result;
 };
-
 export const getUserTaskById = async ({
   taskId,
   userId,
@@ -307,3 +300,4 @@ export const transferUserTask = async ({
 
   return result.updatedTask;
 };
+

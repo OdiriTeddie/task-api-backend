@@ -15,7 +15,7 @@ The domain is intentionally familiar: users own tasks. The engineering focus is 
 - REST API design with Express 5
 - Route-level API versioning under `/api/v1`
 - ESM-first TypeScript setup
-- Route, controller, service, queue, and worker separation
+- Route, controller, service, repository, queue, and worker separation
 - JWT authentication middleware
 - bcrypt password hashing
 - Authenticated `/api/v1/me` endpoint for frontend app bootstrapping
@@ -64,13 +64,15 @@ HTTP request
   -> middleware
   -> controller
   -> service
+  -> repository
   -> Prisma/PostgreSQL, Redis cache, or BullMQ/Redis
 ```
 
 ```text
 src/
 |-- controllers/   HTTP request and response handling
-|-- services/      Business logic, data access, and cache-aware reads
+|-- services/      Business logic, cache orchestration, and operation flow
+|-- repositories/  Prisma-backed database access
 |-- routes/        Express route registration
 |   `-- v1/        Versioned public API routes mounted at /api/v1
 |-- middleware/    Authentication, request ID, logging, and metrics middleware
@@ -80,6 +82,8 @@ src/
 |-- lib/           Shared infrastructure clients, logger, and metrics utilities
 `-- types/         TypeScript declaration merging
 ```
+
+Repository files isolate Prisma database queries from service-level business logic. Services can keep cache decisions, validation of operation flow, and transaction orchestration while repositories handle persistence details.
 
 Redis is used in two ways:
 
@@ -571,5 +575,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution notes.
 ## License
 
 ISC
-
 

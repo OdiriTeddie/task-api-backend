@@ -10,6 +10,7 @@ HTTP request
   -> middleware
   -> controller
   -> service
+  -> repository
   -> Prisma/PostgreSQL or BullMQ/Redis
 ```
 
@@ -19,7 +20,13 @@ Controllers translate HTTP concerns into application calls. They read `req`, cal
 
 ## Services
 
-Services contain business logic and database operations. They should not depend on Express `Request` or `Response` objects.
+Services contain business logic, cache orchestration, operation flow, and transaction coordination. They should not depend on Express `Request` or `Response` objects.
+
+## Repositories
+
+Repositories isolate Prisma-backed database access from service logic. Services call repositories for persistence operations instead of building every Prisma query inline.
+
+The repository layer is being introduced incrementally. The task list read path now delegates list/count queries to `task.repository.ts`, while the rest of the task service can be migrated in smaller follow-up steps.
 
 ## Workers
 
