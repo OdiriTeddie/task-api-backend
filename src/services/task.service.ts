@@ -1,4 +1,3 @@
-import prisma from "../../prismaClient.js";
 import { redisCache } from "../lib/redisConnection.js";
 import { taskRepository } from "../repositories/task.repository.js";
 import { CreateTaskDto } from "../validators/task.validator.js";
@@ -139,6 +138,7 @@ export const listUserTasks = async ({
 
   return result;
 };
+
 export const getUserTaskById = async ({
   taskId,
   userId,
@@ -146,12 +146,7 @@ export const getUserTaskById = async ({
   taskId: number;
   userId: number;
 }) => {
-  return prisma.task.findUnique({
-    where: {
-      id: taskId,
-      userId,
-    },
-  });
+  return taskRepository.findUserTaskById({ taskId, userId });
 };
 
 export const createUserTask = async ({
@@ -160,15 +155,15 @@ export const createUserTask = async ({
   completed,
   dueDate,
 }: CreateTaskDto & { userId: number }) => {
-  const task = await prisma.task.create({
-    data: {
-      title,
-      userId,
-      completed: completed ?? false,
-      dueDate,
-    },
+  const task = await taskRepository.createUserTask({
+    userId,
+    title,
+    completed,
+    dueDate,
   });
+
   await invalidateUserTaskListCache(userId);
+
   return task;
 };
 
@@ -185,18 +180,16 @@ export const updateUserTask = async ({
   completed?: boolean;
   dueDate?: Date | null;
 }) => {
-  const task = await prisma.task.update({
-    where: {
-      id: taskId,
-      userId,
-    },
-    data: {
-      title,
-      completed,
-      dueDate,
-    },
+  const task = await taskRepository.updateUserTask({
+    taskId,
+    userId,
+    title,
+    completed,
+    dueDate,
   });
+
   await invalidateUserTaskListCache(userId);
+
   return task;
 };
 
@@ -213,11 +206,9 @@ export const deleteUserTask = async ({
     return null;
   }
 
-  await prisma.task.delete({
-    where: { id: taskId },
-  });
-
+  await taskRepository.deleteTaskById(taskId);
   await invalidateUserTaskListCache(userId);
+
   return task;
 };
 
@@ -230,69 +221,10 @@ export const transferUserTask = async ({
   currentUserId: number;
   recipientEmail: string;
 }) => {
-  const result = await prisma.$transaction(async (tx) => {
-    const task = await tx.task.findUnique({
-      where: {
-        id: taskId,
-      },
-    });
-
-    if (!task) {
-      throw new Error("Task not found");
-    }
-
-    if (task.userId !== currentUserId) {
-      throw new Error("You can only transfer your own task");
-    }
-
-    const recipient = await tx.user.findUnique({
-      where: {
-        email: recipientEmail,
-      },
-    });
-
-    if (!recipient) {
-      throw new Error("Recipient user not found");
-    }
-
-    if (recipient.id === currentUserId) {
-      throw new Error("You cannot transfer a task to yourself");
-    }
-
-    const updatedTask = await tx.task.update({
-      where: { id: taskId },
-      data: {
-        userId: recipient.id,
-      },
-    });
-
-    const transfer = await tx.taskTransfer.create({
-      data: {
-        taskId,
-        fromUserId: currentUserId,
-        toUserId: recipient.id,
-        status: "completed",
-      },
-    });
-
-    await tx.auditLog.create({
-      data: {
-        actorUserId: currentUserId,
-        action: "TRANSFER TASK",
-        entityType: "Task",
-        entityId: taskId,
-        metadata: {
-          transferId: transfer.id,
-          fromUserId: currentUserId,
-          toUserId: recipient.id,
-        },
-      },
-    });
-
-    return {
-      updatedTask,
-      recipientUserId: recipient.id,
-    };
+  const result = await taskRepository.transferUserTask({
+    taskId,
+    currentUserId,
+    recipientEmail,
   });
 
   await invalidateUserTaskListCache(currentUserId);
@@ -300,4 +232,3 @@ export const transferUserTask = async ({
 
   return result.updatedTask;
 };
-
