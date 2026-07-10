@@ -2,13 +2,13 @@ import { Router } from "express";
 import {
   createTask,
   deleteTask,
-  listTasks,
   getTaskById,
   getTaskReportStatus,
+  listTasks,
   queueTaskReport,
   transferTask,
   updateTask,
-} from "../../controllers/taskController.js";
+} from "../../controllers/task.controller..js";
 import { authMiddleware } from "../../middleware/auth.js";
 import { validateCreateTask } from "../../validators/task.validator.js";
 
@@ -24,5 +24,3 @@ router.delete("/:id", authMiddleware, deleteTask);
 router.post("/:id/transfer", authMiddleware, transferTask);
 
 export default router;
-
-

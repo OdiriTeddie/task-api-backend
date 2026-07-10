@@ -70,6 +70,8 @@ HTTP request
 
 ```text
 src/
+|-- app.ts         Express app configuration, middleware, and route mounting
+|-- server.ts      HTTP server entry point that starts listening on a port
 |-- controllers/   HTTP request and response handling
 |-- services/      Business logic, cache orchestration, and operation flow
 |-- repositories/  Prisma-backed database access
@@ -82,6 +84,8 @@ src/
 |-- lib/           Shared infrastructure clients, logger, and metrics utilities
 `-- types/         TypeScript declaration merging
 ```
+
+`src/app.ts` exports the configured Express application without starting the server. `src/server.ts` imports that app and calls `app.listen`, which keeps app setup separate from process startup and makes the app easier to test or reuse.
 
 Repository files isolate Prisma database queries from service-level business logic. Services can keep cache decisions, validation of operation flow, and transaction orchestration while repositories handle persistence details.
 
@@ -297,10 +301,10 @@ npm run dev:worker:reminders
 
 | Command | Purpose |
 | --- | --- |
-| `npm run dev` | Run the API with file watching |
+| `npm run dev` | Run `src/server.ts` with file watching |
 | `npm run dev:worker` | Run the BullMQ report worker with file watching |
 | `npm run dev:worker:reminders` | Run the BullMQ reminder worker with file watching |
-| `npm start` | Run the API once |
+| `npm start` | Run `src/server.ts` once |
 | `npm run worker` | Run the BullMQ report worker once |
 | `npm run worker:reminders` | Run the BullMQ reminder worker once |
 | `npm run prisma:generate` | Generate Prisma client types |

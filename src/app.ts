@@ -5,7 +5,7 @@ import { getMetricsSnapshot } from "./lib/metrics.js";
 import { requestId } from "./middleware/requestId.js";
 import { requestLogger } from "./middleware/requestLogger.js";
 import { requestMetrics } from "./middleware/requestMetrics.js";
-import healthRoutes from "./routes/healthRoutes.js";
+import healthRoutes from "./routes/health.routes.js";
 import v1Routes from "./routes/v1/index.js";
 
 const app = express();
@@ -27,6 +27,4 @@ app.use((req, res) => {
   res.status(404).send("Not Found");
 });
 
-app.listen(3000, () => {
-  console.log("Server listening on port 3000");
-});
+export default app;

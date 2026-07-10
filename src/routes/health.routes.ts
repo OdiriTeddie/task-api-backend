@@ -1,5 +1,10 @@
 import { Router } from "express";
-import { health, ping, ready, status } from "../controllers/healthController.js";
+import {
+  health,
+  ping,
+  ready,
+  status,
+} from "../controllers/health.controller.js";
 
 const router = Router();
 
