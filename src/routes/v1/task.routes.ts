@@ -8,7 +8,7 @@ import {
   queueTaskReport,
   transferTask,
   updateTask,
-} from "../../controllers/task.controller..js";
+} from "../../controllers/task.controller.js";
 import { authMiddleware } from "../../middleware/auth.js";
 import { validateCreateTask } from "../../validators/task.validator.js";
 
