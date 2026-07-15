@@ -13,6 +13,7 @@ The domain is intentionally familiar: users own tasks. The engineering focus is 
 ## Backend Concepts Demonstrated
 
 - REST API design with Express 5
+- Shared response helper for consistent success and error envelopes
 - Route-level API versioning under `/api/v1`
 - ESM-first TypeScript setup
 - Route, controller, service, repository, queue, and worker separation
@@ -81,7 +82,7 @@ src/
 |-- validators/    Zod request validation
 |-- queues/        BullMQ queue definitions
 |-- workers/       Background job processors
-|-- lib/           Shared infrastructure clients, logger, and metrics utilities
+|-- lib/           Shared infrastructure clients, response helpers, logger, and metrics utilities
 `-- types/         TypeScript declaration merging
 ```
 
@@ -95,6 +96,40 @@ Redis is used in two ways:
 - `redisCache` is an ioredis client used directly by services for cache commands such as `get`, `set`, and `del`.
 
 More detail is available in [docs/architecture.md](docs/architecture.md).
+
+## API Response Shape
+
+Controllers use `src/lib/httpResponse.ts` to keep API responses consistent across features. The helper exposes `sendSuccess` and `sendError`, similar to a lightweight response layer in larger backend frameworks.
+
+Successful responses follow this shape:
+
+```json
+{
+  "success": true,
+  "message": "Tasks retrieved successfully",
+  "data": [],
+  "meta": {
+    "page": 1,
+    "limit": 10,
+    "total": 25,
+    "totalPages": 3
+  }
+}
+```
+
+Error responses follow this shape:
+
+```json
+{
+  "success": false,
+  "message": "Validation failed",
+  "errors": {
+    "title": "Title is required"
+  }
+}
+```
+
+`meta` is included when the response has pagination or other response metadata. `errors` is included when the API has extra validation or failure details to return.
 
 ## API Versioning
 
@@ -186,7 +221,7 @@ A user can register, log in, retrieve their current profile through `/api/v1/me`
 
 A task is owned by a user through `Task.userId`. Protected task reads and deletes are scoped to the authenticated user.
 
-Task list responses use a `{ data, meta }` response shape. The list endpoint supports pagination, completion filtering, creation-date sorting, and title search.
+Task list responses use the shared `{ success, message, data, meta }` response shape. The list endpoint supports pagination, completion filtering, creation-date sorting, and title search.
 
 Tasks can also include an optional `dueDate`. When a task has a due date, the API can queue a delayed reminder job to notify when the task is almost due.
 
@@ -437,6 +472,8 @@ Example list response:
 
 ```json
 {
+  "success": true,
+  "message": "Tasks retrieved successfully",
   "data": [
     {
       "id": 1,
@@ -484,9 +521,12 @@ Example response:
 
 ```json
 {
+  "success": true,
   "message": "Report generation started",
-  "jobId": "1",
-  "statusUrl": "/api/v1/tasks/reports/1"
+  "data": {
+    "jobId": "1",
+    "statusUrl": "/api/v1/tasks/reports/1"
+  }
 }
 ```
 
@@ -530,6 +570,8 @@ curl http://localhost:3000/metrics
 ```
 
 ## Validation and Error Handling
+
+Controllers that have been migrated to the shared response helper return errors with `success: false` and a clear `message`. Validation-specific details can be included in `errors`.
 
 Task creation is validated with Zod before controller logic runs. The API also returns explicit errors for cases such as:
 
