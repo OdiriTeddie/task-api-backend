@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { sendError, sendSuccess } from "../lib/httpResponse.js";
 import { getCurrentUserById } from "../services/user.service.js";
 
 export const getCurrentUser = async (req: Request, res: Response) => {
@@ -8,11 +9,23 @@ export const getCurrentUser = async (req: Request, res: Response) => {
     const user = await getCurrentUserById(id);
 
     if (!user) {
-      return res.status(404).json({ error: "User not found" });
+      return sendError({
+        res,
+        statusCode: 404,
+        message: "User not found",
+      });
     }
 
-    res.status(200).json(user);
+    return sendSuccess({
+      res,
+      message: "Current user retrieved successfully",
+      data: user,
+    });
   } catch (error) {
-    res.status(400).json({ error: "User not found" });
+    return sendError({
+      res,
+      statusCode: 400,
+      message: "User not found",
+    });
   }
 };
