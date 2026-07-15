@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { sendError, sendSuccess } from "../lib/httpResponse.js";
 import { reminderQueue } from "../queues/reminderQueue.js";
 import { reportQueue } from "../queues/reportQueue.js";
 import {
@@ -18,12 +19,18 @@ export const listTasks = async (req: Request, res: Response) => {
     const limit = Number(req.query.limit ?? 10);
 
     if (!Number.isInteger(page) || page < 1) {
-      return res.status(400).json({ error: "page must be a positive integer" });
+      return sendError({
+        res,
+        statusCode: 400,
+        message: "page must be a positive integer",
+      });
     }
 
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
-      return res.status(400).json({
-        error: "limit must be a positive integer between 1 and 100",
+      return sendError({
+        res,
+        statusCode: 400,
+        message: "limit must be a positive integer between 1 and 100",
       });
     }
 
@@ -36,10 +43,17 @@ export const listTasks = async (req: Request, res: Response) => {
       limit,
     });
 
-    res.json(result);
+    return sendSuccess({
+      res,
+      message: "Tasks retrieved successfully",
+      data: result.data,
+      meta: result.meta,
+    });
   } catch (error) {
-    res.status(400).json({
-      error: error instanceof Error ? error.message : "Invalid request",
+    return sendError({
+      res,
+      statusCode: 400,
+      message: error instanceof Error ? error.message : "Invalid request",
     });
   }
 };
@@ -51,15 +65,16 @@ export const getTaskById = async (req: Request, res: Response) => {
   });
 
   if (!task) {
-    return res.status(404).json({
-      error: {
-        code: 404,
-        message: "Task Not Found",
-      },
+    return sendError({
+      res,
+      statusCode: 404,
+      message: "Task Not Found",
     });
   }
 
-  res.json({
+  return sendSuccess({
+    res,
+    message: "Task retrieved successfully",
     data: task,
   });
 };
@@ -68,13 +83,12 @@ export const createTask = async (req: Request, res: Response) => {
   const { title, completed, dueDate } = req.body;
 
   if (!title) {
-    return res.status(400).json({
-      error: {
-        code: 400,
-        message: "Validation failed",
-        fields: {
-          title: "Title is required",
-        },
+    return sendError({
+      res,
+      statusCode: 400,
+      message: "Validation failed",
+      errors: {
+        title: "Title is required",
       },
     });
   }
@@ -117,12 +131,14 @@ export const createTask = async (req: Request, res: Response) => {
     }
   }
 
-  res.status(201).json({
+  return sendSuccess({
+    res,
+    statusCode: 201,
+    message: "Task created successfully",
     data: {
       task,
       reminderJobId,
     },
-    message: "Task created successfully",
   });
 };
 
@@ -134,10 +150,10 @@ export const updateTask = async (req: Request, res: Response) => {
   const task = await getUserTaskById({ taskId, userId });
 
   if (!task) {
-    return res.status(404).json({
-      error: {
-        message: "Task Not Found",
-      },
+    return sendError({
+      res,
+      statusCode: 404,
+      message: "Task Not Found",
     });
   }
 
@@ -149,11 +165,12 @@ export const updateTask = async (req: Request, res: Response) => {
     dueDate: dueDate ?? task.dueDate,
   });
 
-  res.status(200).json({
+  return sendSuccess({
+    res,
+    message: "Task updated successfully",
     data: {
       task: updatedTask,
     },
-    message: "Task updated successfully",
   });
 };
 
@@ -164,10 +181,15 @@ export const deleteTask = async (req: Request, res: Response) => {
   });
 
   if (!task) {
-    return res.status(404).json({ error: "Task Not Found" });
+    return sendError({
+      res,
+      statusCode: 404,
+      message: "Task Not Found",
+    });
   }
 
-  res.status(200).json({
+  return sendSuccess({
+    res,
     message: "Task Deleted Successfully",
   });
 };
@@ -184,15 +206,18 @@ export const transferTask = async (req: Request, res: Response) => {
       recipientEmail,
     });
 
-    res.status(200).json({
+    return sendSuccess({
+      res,
+      message: "Task transferred successfully",
       data: {
         task,
       },
-      message: "Task transferred successfully",
     });
   } catch (error) {
-    res.status(400).json({
-      error: error instanceof Error ? error.message : "Transfer failed",
+    return sendError({
+      res,
+      statusCode: 400,
+      message: error instanceof Error ? error.message : "Transfer failed",
     });
   }
 };
@@ -213,10 +238,14 @@ export const queueTaskReport = async (req: Request, res: Response) => {
     },
   );
 
-  return res.status(202).json({
+  return sendSuccess({
+    res,
+    statusCode: 202,
     message: "Report generation started",
-    jobId: job.id,
-    statusUrl: `/api/v1/tasks/reports/${job.id}`,
+    data: {
+      jobId: job.id,
+      statusUrl: `/api/v1/tasks/reports/${job.id}`,
+    },
   });
 };
 
@@ -224,29 +253,36 @@ export const getTaskReportStatus = async (req: Request, res: Response) => {
   const { jobId } = req.params;
 
   if (typeof jobId !== "string") {
-    return res.status(400).json({
-      error: "Invalid report job id",
+    return sendError({
+      res,
+      statusCode: 400,
+      message: "Invalid report job id",
     });
   }
 
   const job = await reportQueue.getJob(jobId);
 
   if (!job) {
-    return res.status(404).json({
-      error: "Report job not found",
+    return sendError({
+      res,
+      statusCode: 404,
+      message: "Report job not found",
     });
   }
 
   const state = await job.getState();
 
-  return res.json({
-    jobId: job.id,
-    name: job.name,
-    state,
-    progress: job.progress,
-    data: job.data,
-    failedReason: job.failedReason,
-    returnvalue: job.returnvalue,
+  return sendSuccess({
+    res,
+    message: "Report job status retrieved successfully",
+    data: {
+      jobId: job.id,
+      name: job.name,
+      state,
+      progress: job.progress,
+      data: job.data,
+      failedReason: job.failedReason,
+      returnvalue: job.returnvalue,
+    },
   });
 };
-
